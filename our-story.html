@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Sophie & Craig ♡</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html, body {
+  height: 100%;
+  background: #050a08;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Courier New', Courier, monospace;
+  overflow: hidden;
+}
+#app {
+  position: relative;
+  width: min(360px, 96vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+#book {
+  position: relative;
+  width: 100%;
+  background: #070c0a;
+  border-radius: 3px 8px 8px 3px;
+  box-shadow:
+    0 0 0 1px rgba(0,255,136,.18),
+    0 0 28px rgba(0,255,136,.1),
+    4px 4px 0 #001a10,
+    8px 8px 0 #00110a;
+  overflow: hidden;
+  cursor: pointer;
+}
+#spine {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 9px;
+  background: linear-gradient(to right, #001a10, #002e1a);
+  z-index: 5;
+}
+#spine::after {
+  content: '';
+  position: absolute;
+  top: 8px; left: 1px; right: 1px; bottom: 8px;
+  background: repeating-linear-gradient(to bottom,
+    transparent, transparent 4px,
+    rgba(0,255,136,.18) 4px, rgba(0,255,136,.18) 5px);
+}
+#canvas-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3/4;
+  overflow: hidden;
+  transform-origin: center center;
+  transition: transform .18s ease;
+}
+canvas { display: block; width: 100%; height: 100%; }
+#tap-hint {
+  position: absolute;
+  bottom: 8px; right: 12px;
+  font-size: 11px;
+  color: rgba(0,255,136,.45);
+  pointer-events: none;
+  transition: opacity .4s;
+  letter-spacing: .06em;
+  font-family: 'Courier New', monospace;
+}
+#tap-hint.gone { opacity: 0; }
+#dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 0 6px;
+}
+.dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #0d1a12;
+  border: 1px solid rgba(0,255,136,.2);
+  transition: background .3s, transform .3s, box-shadow .3s;
+}
+.dot.on { background: #00ff88; transform: scale(1.4); box-shadow: 0 0 7px #00ff88; }
+#caption {
+  padding: 10px 18px 6px;
+  min-height: 62px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+}
+#cap-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #7aeab0;
+  font-style: italic;
+  letter-spacing: .03em;
+}
+#cap-num {
+  font-size: 10px;
+  color: rgba(0,255,136,.35);
+  font-family: 'Courier New', monospace;
+  margin-top: 4px;
+  letter-spacing: .08em;
+}
+#controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px 16px;
+  width: 100%;
+  gap: 8px;
+}
+.cbtn {
+  flex: 1;
+  background: #0a1a10;
+  border: 1px solid rgba(0,255,136,.25);
+  color: #00ff88;
+  padding: 14px 8px;
+  border-radius: 6px;
+  font-size: 22px;
+  font-family: 'Courier New', monospace;
+  cursor: pointer;
+  transition: background .15s, transform .1s, border-color .15s;
+  line-height: 1;
+}
+.cbtn:active { background: #0d2818; transform: scale(0.96); border-color: rgba(0,255,136,.6); }
+#playbtn {
+  flex: 0 0 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #00ff88;
+  color: #050a08;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .1s, box-shadow .15s;
+  box-shadow: 0 0 14px rgba(0,255,136,.45);
+}
+#playbtn:active { transform: scale(0.92); box-shadow: 0 0 22px rgba(0,255,136,.75); }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="book">
+    <div id="spine"></div>
+    <div id="canvas-wrap">
+      <canvas id="c"></canvas>
+      <div id="tap-hint">tap to flip →</div>
+    </div>
+    <div id="dots"></div>
+    <div id="caption">
+      <div id="cap-text"></div>
+      <div id="cap-num"></div>
+    </div>
+    <div id="controls">
+      <button class="cbtn" id="prev">‹</button>
+      <button id="playbtn">▶</button>
+      <button class="cbtn" id="next">›</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ───────────────────────────────────────────
+//  FLIP BOOK · Sophie & Craig
+// ───────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+function W() { return canvas.width; }
+function H() { return canvas.height; }
+
+function resize() {
+  const wrap = document.getElementById('canvas-wrap');
+  canvas.width  = wrap.offsetWidth;
+  canvas.height = wrap.offsetHeight;
+  draw();
+}
+window.addEventListener('resize', resize);
+
+// ── palette ──────────────────────────────
+const P = {
+  night:     '#000408',
+  evening:   '#000814',
+  dusk:      '#001a14',
+  sky:       '#000c18',
+  skyWarm:   '#000c14',
+  ground:    '#061a0e',
+  groundDk:  '#030e07',
+  skin:      '#f5c8a0',      // Sophie
+  skinC:     '#e8a87c',      // Craig
+  hairS:     '#c8922a',      // Sophie buns (warm amber)
+  hairC:     '#666868',      // Craig grey
+  shirt1:    '#003a2a',      // Sophie default — dark teal
+  shirt2:    '#001e3a',      // Craig default — dark navy
+  heart:     '#ff006e',
+  heartPale: 'rgba(255,0,110,.3)',
+  brown:     '#00d4a0',
+  cream:     '#070c0a',
+  gold:      '#00ff88',
+  purple:    '#005a6a',
+  teal:      '#00e5cc',
+  page:      '#0d1a14',
+  text:      '#00ff88',
+};
+
+// ── utility ──────────────────────────────
+function lines() {
+  ctx.strokeStyle = 'rgba(0,255,136,.04)';
+  ctx.lineWidth = 1;
+  for (let y = 36; y < H(); y += 26) {
+    ctx.beginPath(); ctx.moveTo(14, y); ctx.lineTo(W()-6, y); ctx.stroke();
+  }
+}
+function bg(col) {
+  ctx.fillStyle = col || P.cream;
+  ctx.fillRect(0, 0, W(), H());
+  lines();
+}
+function heart(x, y, r) {
+  // draws a heart centred at x,y with "radius" r
+  ctx.beginPath();
+  ctx.moveTo(x, y + r * .3);
+  ctx.bezierCurveTo(x - r*1.2, y - r*.5,  x - r*1.2, y - r*1.2, x,        y - r*.45);
+  ctx.bezierCurveTo(x + r*1.2, y - r*1.2, x + r*1.2, y - r*.5,  x,        y + r*.3);
+  ctx.closePath();
+  ctx.fill();
+}
+function star(x, y, r) {
+  ctx.save(); ctx.translate(x, y);
+  ctx.beginPath();
+  for (let i = 0; i < 5; i++) {
+    const a = (i * 4 * Math.PI / 5) - Math.PI / 2;
+    const b = a + 2 * Math.PI / 5;
+    i === 0 ? ctx.moveTo(Math.cos(a)*r, Math.sin(a)*r) : ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+    ctx.lineTo(Math.cos(b)*r*.4, Math.sin(b)*r*.4);
+  }
+  ctx.closePath(); ctx.fill(); ctx.restore();
+}
+function note(x, y, sz, col) {
+  ctx.fillStyle = col || 'rgba(255,255,255,.75)';
+  ctx.font = `${sz}px serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('♪', x, y);
+}
+
+// ── Sophie ────────────────────────────────
+// x,y = foot/base position, s = scale 1=normal, mood: happy|sad|love|neutral
+function sophie(x, y, s, mood, sc) {
+  s = s || 1; mood = mood || 'happy';
+  const sw = sc || P.shirt1;
+  ctx.save(); ctx.translate(x, y - s*60);
+  // body
+  ctx.fillStyle = sw;
+  ctx.beginPath(); ctx.ellipse(0, s*35, s*20, s*28, 0, 0, Math.PI*2); ctx.fill();
+  // arms — visible and cute
+  ctx.fillStyle = P.skin;
+  ctx.beginPath(); ctx.ellipse(-s*26, s*28, s*7, s*17, -.25, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( s*26, s*28, s*7, s*17,  .25, 0, Math.PI*2); ctx.fill();
+  // neck
+  ctx.fillStyle = P.skin;
+  ctx.beginPath(); ctx.ellipse(0, s*7, s*7, s*9, 0, 0, Math.PI*2); ctx.fill();
+  // head
+  ctx.fillStyle = P.skin;
+  ctx.beginPath(); ctx.ellipse(0, -s*12, s*21, s*24, 0, 0, Math.PI*2); ctx.fill();
+  // ★ SPACE BUNS ★
+  ctx.fillStyle = P.hairS;
+  ctx.beginPath(); ctx.arc(-s*19, -s*30, s*11, 0, Math.PI*2); ctx.fill(); // L bun
+  ctx.beginPath(); ctx.arc( s*19, -s*30, s*11, 0, Math.PI*2); ctx.fill(); // R bun
+  ctx.fillStyle = '#e0b050'; // highlight
+  ctx.beginPath(); ctx.arc(-s*21, -s*33, s*4.5, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc( s*21, -s*33, s*4.5, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = P.hairS;
+  ctx.beginPath(); ctx.ellipse(0, -s*24, s*12, s*7, 0, 0, Math.PI*2); ctx.fill(); // connector
+  // cheeks
+  ctx.fillStyle = 'rgba(255,140,130,.3)';
+  ctx.beginPath(); ctx.ellipse(-s*13, -s*9, s*6, s*4, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( s*13, -s*9, s*6, s*4, 0, 0, Math.PI*2); ctx.fill();
+  // eyes
+  ctx.strokeStyle = '#3a2010'; ctx.lineWidth = s*2; ctx.lineCap = 'round';
+  if (mood === 'love') {
+    ctx.fillStyle = P.heart;
+    heart(-s*8, -s*13, s*5); heart(s*8, -s*13, s*5);
+  } else if (mood === 'happy') {
+    ctx.beginPath(); ctx.arc(-s*8, -s*13, s*4.5, Math.PI*1.1, Math.PI*1.9); ctx.stroke();
+    ctx.beginPath(); ctx.arc( s*8, -s*13, s*4.5, Math.PI*1.1, Math.PI*1.9); ctx.stroke();
+  } else if (mood === 'sad') {
+    ctx.fillStyle = '#3a2010';
+    ctx.beginPath(); ctx.arc(-s*8, -s*13, s*3, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc( s*8, -s*13, s*3, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#88aadd'; // tears
+    ctx.beginPath(); ctx.ellipse(-s*8, -s*6, s*2, s*5, 0, 0, Math.PI*2); ctx.fill();
+  } else {
+    ctx.fillStyle = '#3a2010';
+    ctx.beginPath(); ctx.arc(-s*8, -s*13, s*3, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc( s*8, -s*13, s*3, 0, Math.PI*2); ctx.fill();
+  }
+  // mouth
+  ctx.strokeStyle = '#b06040'; ctx.lineWidth = s*1.5;
+  if (mood === 'happy' || mood === 'love') {
+    ctx.beginPath(); ctx.arc(0, -s*4, s*7, .1, Math.PI-.1); ctx.stroke();
+  } else if (mood === 'sad') {
+    ctx.beginPath(); ctx.arc(0, s*1, s*6, Math.PI+.35, -.35); ctx.stroke();
+  } else {
+    ctx.beginPath(); ctx.moveTo(-s*5, -s*4); ctx.lineTo(s*5, -s*4); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ── Craig ─────────────────────────────────
+// TONED ARMS are his signature — always drawn visibly muscular
+function craig(x, y, s, mood, sc) {
+  s = s || 1; mood = mood || 'happy';
+  const sw = sc || P.shirt2;
+  ctx.save(); ctx.translate(x, y - s*65);
+  // body — broader
+  ctx.fillStyle = sw;
+  ctx.beginPath(); ctx.ellipse(0, s*38, s*26, s*31, 0, 0, Math.PI*2); ctx.fill();
+  // ★ TONED ARMS ★
+  ctx.fillStyle = P.skinC;
+  // L arm
+  ctx.save(); ctx.translate(-s*34, s*26);
+  ctx.beginPath(); ctx.ellipse(0, 0, s*10, s*19, -.22, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#d4946a'; // bicep shadow
+  ctx.beginPath(); ctx.ellipse(-s*3, -s*5, s*7, s*7, 0, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+  // R arm
+  ctx.fillStyle = P.skinC;
+  ctx.save(); ctx.translate(s*34, s*26);
+  ctx.beginPath(); ctx.ellipse(0, 0, s*10, s*19, .22, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#d4946a';
+  ctx.beginPath(); ctx.ellipse(s*3, -s*5, s*7, s*7, 0, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+  // neck
+  ctx.fillStyle = P.skinC;
+  ctx.beginPath(); ctx.ellipse(0, s*5, s*10, s*12, 0, 0, Math.PI*2); ctx.fill();
+  // head
+  ctx.fillStyle = P.skinC;
+  ctx.beginPath(); ctx.ellipse(0, -s*14, s*23, s*26, 0, 0, Math.PI*2); ctx.fill();
+  // hair — short, salt+pepper
+  ctx.fillStyle = P.hairC;
+  ctx.beginPath(); ctx.arc(0, -s*26, s*23, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = '#aaa';
+  ctx.beginPath(); ctx.arc(-s*9, -s*32, s*6, Math.PI, 0); ctx.fill();
+  ctx.beginPath(); ctx.arc( s*9, -s*32, s*6, Math.PI, 0); ctx.fill();
+  // cheeks
+  ctx.fillStyle = 'rgba(200,130,90,.22)';
+  ctx.beginPath(); ctx.ellipse(-s*15, -s*8, s*6, s*4, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( s*15, -s*8, s*6, s*4, 0, 0, Math.PI*2); ctx.fill();
+  // eyes
+  ctx.strokeStyle = '#2a1808'; ctx.lineWidth = s*2.5; ctx.lineCap = 'round';
+  if (mood === 'love') {
+    ctx.fillStyle = P.heart;
+    heart(-s*9, -s*14, s*6); heart(s*9, -s*14, s*6);
+  } else if (mood === 'happy') {
+    ctx.beginPath(); ctx.arc(-s*9, -s*14, s*5, Math.PI*1.1, Math.PI*1.9); ctx.stroke();
+    ctx.beginPath(); ctx.arc( s*9, -s*14, s*5, Math.PI*1.1, Math.PI*1.9); ctx.stroke();
+  } else if (mood === 'sad') {
+    ctx.fillStyle = '#2a1808';
+    ctx.beginPath(); ctx.arc(-s*9, -s*14, s*4, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc( s*9, -s*14, s*4, 0, Math.PI*2); ctx.fill();
+  } else {
+    ctx.fillStyle = '#2a1808';
+    ctx.beginPath(); ctx.arc(-s*9, -s*14, s*4, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc( s*9, -s*14, s*4, 0, Math.PI*2); ctx.fill();
+  }
+  // ★ WARM SMILE ★
+  ctx.strokeStyle = '#904820'; ctx.lineWidth = s*2;
+  if (mood === 'happy' || mood === 'love') {
+    ctx.beginPath(); ctx.arc(0, -s*4, s*10, .12, Math.PI-.12); ctx.stroke();
+    ctx.fillStyle = 'rgba(170,90,50,.2)'; // dimples
+    ctx.beginPath(); ctx.arc(-s*14, -s*5, s*3, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc( s*14, -s*5, s*3, 0, Math.PI*2); ctx.fill();
+  } else if (mood === 'sad') {
+    ctx.beginPath(); ctx.arc(0, s*1, s*7, Math.PI+.35, -.35); ctx.stroke();
+  } else {
+    ctx.beginPath(); ctx.moveTo(-s*8, -s*4); ctx.lineTo(s*8, -s*4); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ── Seattle skyline ───────────────────────
+function seattle(cx, groundY, s, col) {
+  s = s||1; col = col||'#3a5070';
+  ctx.fillStyle = col;
+  // Space Needle
+  ctx.fillRect(cx-s, groundY-s*38, s*2, s*38);
+  ctx.beginPath(); ctx.moveTo(cx-s*9, groundY-s*38);
+  ctx.lineTo(cx, groundY-s*52); ctx.lineTo(cx+s*9, groundY-s*38); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx, groundY-s*43, s*13, s*5, 0, 0, Math.PI*2); ctx.fill();
+  // buildings
+  ctx.fillRect(cx+s*18, groundY-s*24, s*13, s*24);
+  ctx.fillRect(cx+s*34, groundY-s*32, s*11, s*32);
+  ctx.fillRect(cx-s*32, groundY-s*28, s*14, s*28);
+  ctx.fillRect(cx-s*50, groundY-s*18, s*12, s*18);
+}
+
+// ── Portland skyline ──────────────────────
+function portland(cx, groundY, s, col) {
+  s = s||1; col = col||'#3a5040';
+  ctx.fillStyle = col;
+  ctx.strokeStyle = col;
+  // Hawthorne bridge feel
+  ctx.lineWidth = s*3;
+  ctx.beginPath(); ctx.moveTo(cx-s*55, groundY); ctx.lineTo(cx+s*55, groundY); ctx.stroke();
+  ctx.lineWidth = s*2;
+  ctx.beginPath(); ctx.arc(cx, groundY, s*42, Math.PI, 0); ctx.stroke();
+  ctx.fillRect(cx-s*42, groundY-s*28, s*7, s*28);
+  ctx.fillRect(cx+s*35, groundY-s*28, s*7, s*28);
+  // buildings behind
+  ctx.fillStyle = col;
+  ctx.fillRect(cx-s*20, groundY-s*22, s*12, s*22);
+  ctx.fillRect(cx+s*10, groundY-s*30, s*10, s*30);
+}
+
+// ── DJ booth ─────────────────────────────
+function djBooth(cx, groundY, s) {
+  s = s||1;
+  ctx.fillStyle = '#0a0a1e';
+  ctx.fillRect(cx-s*45, groundY-s*18, s*90, s*18);
+  // decks
+  ctx.fillStyle = '#1e1e2e';
+  ctx.beginPath(); ctx.arc(cx-s*22, groundY-s*11, s*13, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx+s*22, groundY-s*11, s*13, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx-s*22, groundY-s*11, s*8, 0, Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx+s*22, groundY-s*11, s*8, 0, Math.PI*2); ctx.stroke();
+  // lasers
+  ctx.strokeStyle = 'rgba(220,80,255,.65)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(cx, groundY-s*18); ctx.lineTo(cx-s*90, groundY-s*100); ctx.stroke();
+  ctx.strokeStyle = 'rgba(80,180,255,.65)';
+  ctx.beginPath(); ctx.moveTo(cx, groundY-s*18); ctx.lineTo(cx+s*90, groundY-s*100); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,220,60,.5)';
+  ctx.beginPath(); ctx.moveTo(cx, groundY-s*18); ctx.lineTo(cx, groundY-s*110); ctx.stroke();
+}
+
+// ── pre-computed random positions ─────────
+const rainLines  = Array.from({length:22}, (_,i) => [((i*137+31)%360)/360, ((i*97+17)%60)/100]);
+const starsPos   = Array.from({length:32}, (_,i) => [((i*173+11)%380)/400, ((i*113+7)%55)/100]);
+const confetti   = Array.from({length:18}, (_,i) => [((i*157+23)%340)/360, ((i*89+13)%55)/100, (i*37)%360, ['#e83880','#f5c840','#7adc44','#8844bb','#44aaff'][i%5]]);
+
+// ── SCENES ───────────────────────────────
+const scenes = [
+
+  // 0 — Cover
+  { cap: "Sophie & Craig ♡ — a love story",
+    draw() {
+      bg();
+      // border
+      ctx.strokeStyle = 'rgba(0,255,136,.35)'; ctx.lineWidth = 3;
+      ctx.strokeRect(12, 12, W()-18, H()-18);
+      ctx.strokeStyle = 'rgba(0,255,136,.12)'; ctx.lineWidth = 1;
+      ctx.strokeRect(16, 16, W()-26, H()-26);
+      // flourishes
+      ctx.fillStyle = P.teal; ctx.font = `${H()*.042}px serif`; ctx.textAlign='center';
+      ctx.fillText('✦', W()*.12, H()*.08); ctx.fillText('✦', W()*.88, H()*.08);
+      ctx.fillText('✦', W()*.12, H()*.94); ctx.fillText('✦', W()*.88, H()*.94);
+      // title
+      ctx.font = `bold ${H()*.072}px 'Courier New', monospace`; ctx.fillStyle = '#00ff88';
+      ctx.fillText('Sophie', W()/2, H()*.27);
+      ctx.fillStyle = P.teal;
+      ctx.fillText('& Craig', W()/2, H()*.37);
+      // big heart
+      ctx.fillStyle = P.heart;
+      heart(W()/2, H()*.5, H()*.075);
+      // glow behind heart
+      const hg = ctx.createRadialGradient(W()/2, H()*.48, 0, W()/2, H()*.48, H()*.12);
+      hg.addColorStop(0,'rgba(255,0,110,.25)'); hg.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=hg; ctx.fillRect(0,0,W(),H());
+      ctx.fillStyle = P.heart; heart(W()/2, H()*.5, H()*.075);
+      // characters
+      sophie(W()*.3,  H()*.8, .72, 'love');
+      craig( W()*.7,  H()*.8, .72, 'love');
+      ctx.fillStyle = 'rgba(255,0,110,.28)'; heart(W()/2, H()*.79, H()*.024);
+      // sub
+      ctx.fillStyle = 'rgba(0,255,136,.55)'; ctx.font = `italic ${H()*.034}px 'Courier New', monospace`;
+      ctx.fillText('tap to begin →', W()/2, H()*.9);
+      ctx.textAlign='left';
+    }
+  },
+
+  // 1 — Concert night
+  { cap: "October 2024. A sold-out DJ set. Nora En Pure on stage.",
+    draw() {
+      ctx.fillStyle = P.night; ctx.fillRect(0,0,W(),H());
+      // purple glow
+      const g = ctx.createRadialGradient(W()/2, H()*.28, 0, W()/2, H()*.28, W()*.85);
+      g.addColorStop(0,'rgba(110,30,170,.65)'); g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.fillRect(0,0,W(),H());
+      // crowd
+      ctx.fillStyle = 'rgba(255,255,255,.12)';
+      [.08,.2,.32,.44,.56,.68,.8,.92].forEach((fx,i) => {
+        ctx.beginPath(); ctx.arc(W()*fx, H()*.68, W()*.038, 0, Math.PI*2); ctx.fill();
+      });
+      // DJ booth
+      djBooth(W()/2, H()*.28, .9);
+      // ── NORA EN PURE logo — projected behind the stage ──
+      ctx.save();
+      // Soft white projection glow
+      const nepGlow = ctx.createRadialGradient(W()/2, H()*.44, 0, W()/2, H()*.44, W()*.42);
+      nepGlow.addColorStop(0,'rgba(255,255,255,.12)'); nepGlow.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=nepGlow; ctx.fillRect(0,H()*.3,W(),H()*.28);
+      // thin rule above name
+      ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(W()*.22,H()*.37); ctx.lineTo(W()*.78,H()*.37); ctx.stroke();
+      // "NORA EN PURE" — big, clean, spaced out
+      ctx.fillStyle='rgba(255,255,255,.9)';
+      ctx.font=`bold ${H()*.048}px 'Helvetica Neue',Arial,sans-serif`;
+      ctx.textAlign='center';
+      ctx.letterSpacing='0.15em';
+      ctx.fillText('NORA EN PURE', W()/2, H()*.43);
+      // thin rule below
+      ctx.beginPath(); ctx.moveTo(W()*.22,H()*.445); ctx.lineTo(W()*.78,H()*.445); ctx.stroke();
+      // "PURIFIED" label — smaller, spaced
+      ctx.fillStyle='rgba(255,255,255,.5)';
+      ctx.font=`${H()*.019}px 'Helvetica Neue',Arial,sans-serif`;
+      ctx.letterSpacing='0.3em';
+      ctx.fillText('PURIFIED', W()/2, H()*.475);
+      ctx.letterSpacing='0';
+      ctx.restore();
+      ctx.textAlign='left';
+      // notes
+      note(W()*.08, H()*.15, H()*.05); note(W()*.8, H()*.12, H()*.044); note(W()*.55, H()*.22, H()*.038);
+      // sophie
+      sophie(W()*.27, H()*.8, .88, 'happy', '#7030a0');
+      // craig — back, catching her eye
+      craig(W()*.73, H()*.8, .88, 'neutral', '#1e3870');
+      // spotlight strip
+      ctx.fillStyle = 'rgba(255,240,160,.06)';
+      ctx.beginPath(); ctx.moveTo(W()*.5,0); ctx.lineTo(W()*.18,H()); ctx.lineTo(W()*.82,H()); ctx.closePath(); ctx.fill();
+    }
+  },
+
+  // 2 — First glance
+  { cap: "Two strangers. One dance floor. Something felt different.",
+    draw() {
+      ctx.fillStyle = P.evening; ctx.fillRect(0,0,W(),H());
+      const g = ctx.createRadialGradient(W()/2, H()*.55, 0, W()/2, H()*.55, W()*.7);
+      g.addColorStop(0,'rgba(160,60,220,.45)'); g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g; ctx.fillRect(0,0,W(),H());
+      sophie(W()*.3, H()*.77, 1.0, 'happy', '#7030a0');
+      craig( W()*.7, H()*.77, 1.0, 'happy', '#1e3870');
+      // eye-contact shimmer — neon green
+      ctx.strokeStyle='rgba(0,255,136,.45)'; ctx.lineWidth=2; ctx.setLineDash([4,4]);
+      ctx.beginPath(); ctx.moveTo(W()*.42,H()*.55); ctx.lineTo(W()*.58,H()*.55); ctx.stroke();
+      ctx.setLineDash([]);
+      // sparkles — electric teal
+      ctx.fillStyle='rgba(0,229,204,.9)';
+      [[W()*.14,H()*.28],[W()*.84,H()*.24],[W()*.5,H()*.18],[W()*.18,H()*.72],[W()*.82,H()*.7]].forEach(([sx,sy])=>{
+        ctx.beginPath(); ctx.arc(sx, sy, 2.5, 0, Math.PI*2); ctx.fill();
+      });
+      ctx.fillStyle = 'rgba(255,0,110,.3)';
+      heart(W()*.5, H()*.38, H()*.022);
+    }
+  },
+
+  // 3 — He actually saw her
+  { cap: "He wasn't drawn to her for the usual reasons. He actually saw her.",
+    draw() {
+      bg();
+      sophie(W()*.32, H()*.72, 1.05, 'happy');
+      craig( W()*.7,  H()*.68, 1.05, 'happy');
+      // speech bubble from Craig
+      ctx.fillStyle='rgba(5,18,12,.96)'; ctx.strokeStyle='rgba(0,255,136,.35)'; ctx.lineWidth=1.5;
+      ctx.beginPath();
+      const bx=W()*.04, by=H()*.07, bw=W()*.56, bh=H()*.16, br=10;
+      ctx.moveTo(bx+br,by); ctx.lineTo(bx+bw-br,by);
+      ctx.arcTo(bx+bw,by,bx+bw,by+br,br); ctx.lineTo(bx+bw,by+bh-br);
+      ctx.arcTo(bx+bw,by+bh,bx+bw-br,by+bh,br); ctx.lineTo(bx+.62*bw,by+bh);
+      ctx.lineTo(bx+.55*bw,by+bh+H()*.06); ctx.lineTo(bx+.48*bw,by+bh);
+      ctx.lineTo(bx+br,by+bh);
+      ctx.arcTo(bx,by+bh,bx,by+bh-br,br); ctx.lineTo(bx,by+br);
+      ctx.arcTo(bx,by,bx+br,by,br); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle='#00ff88'; ctx.font=`italic ${H()*.028}px 'Courier New', monospace`; ctx.textAlign='center';
+      ctx.fillText('"There\'s something', bx+bw*.5, by+H()*.06);
+      ctx.fillText('real about her."', bx+bw*.5, by+H()*.115);
+      ctx.textAlign='left';
+      ctx.fillStyle='rgba(255,0,110,.55)'; heart(W()*.84,H()*.2,H()*.026);
+      ctx.fillStyle='rgba(255,0,110,.3)'; heart(W()*.9,H()*.13,H()*.017);
+    }
+  },
+
+  // 4 — First date adventure
+  { cap: "A date the following week. Biking. Laughing upside-down. Pure magic.",
+    draw() {
+      bg();
+      // sky — deep midnight
+      ctx.fillStyle='#000c18'; ctx.fillRect(0,0,W(),H()*.54);
+      // stars
+      ctx.fillStyle='rgba(0,255,136,.5)';
+      [[W()*.15,H()*.08],[W()*.45,H()*.05],[W()*.7,H()*.1],[W()*.88,H()*.06],[W()*.6,H()*.18],[W()*.3,H()*.2]].forEach(([sx,sy])=>{
+        ctx.beginPath(); ctx.arc(sx,sy,1.2,0,Math.PI*2); ctx.fill();
+      });
+      // moon (neon teal orb)
+      ctx.fillStyle='rgba(0,229,204,.8)';
+      ctx.beginPath(); ctx.arc(W()*.84,H()*.1,W()*.05,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='rgba(0,229,204,.15)';
+      ctx.beginPath(); ctx.arc(W()*.84,H()*.1,W()*.09,0,Math.PI*2); ctx.fill();
+      // ground
+      ctx.fillStyle=P.ground; ctx.fillRect(0,H()*.54,W(),H()*.46);
+      ctx.fillStyle=P.groundDk; ctx.fillRect(0,H()*.74,W(),H()*.26);
+      // path
+      ctx.fillStyle='#0a1e14';
+      ctx.beginPath(); ctx.ellipse(W()/2, H()*.78, W()*.32, H()*.14, 0, 0, Math.PI*2); ctx.fill();
+      // trees
+      ctx.fillStyle='#003820';
+      ctx.beginPath(); ctx.arc(W()*.1,H()*.44,W()*.08,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(W()*.9,H()*.42,W()*.09,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#001a08';
+      ctx.fillRect(W()*.08,H()*.5,W()*.04,H()*.1);
+      ctx.fillRect(W()*.88,H()*.5,W()*.04,H()*.1);
+      // Sophie with leopard helmet (her actual one!)
+      sophie(W()*.3, H()*.8, .94, 'happy', '#1a1a2a');
+      ctx.fillStyle='#c8a838';
+      ctx.beginPath(); ctx.ellipse(W()*.3, H()*.62, W()*.094, H()*.042, 0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#7a6020';
+      [[W()*.27,H()*.616],[W()*.32,H()*.618],[W()*.3,H()*.628]].forEach(([dx,dy])=>{
+        ctx.beginPath(); ctx.arc(dx,dy,W()*.008,0,Math.PI*2); ctx.fill();
+      });
+      // Craig with bike helmet
+      craig(W()*.7, H()*.78, .94, 'happy', '#1e3860');
+      ctx.fillStyle='#2a5830';
+      ctx.beginPath(); ctx.ellipse(W()*.7, H()*.6, W()*.1, H()*.042, 0,0,Math.PI*2); ctx.fill();
+    }
+  },
+
+  // 5 — Heartbreak
+  { cap: "Then he stepped back. She understood — but was devastated.",
+    draw() {
+      bg();
+      // dark sky
+      ctx.fillStyle='#000812'; ctx.fillRect(0,0,W(),H()*.52);
+      // rain — electric blue
+      ctx.strokeStyle='rgba(0,180,255,.4)'; ctx.lineWidth=1;
+      rainLines.forEach(([rx,ry])=>{
+        const px=rx*W(), py=ry*H();
+        ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px-3,py+14); ctx.stroke();
+      });
+      // ground
+      ctx.fillStyle='#051008'; ctx.fillRect(0,H()*.52,W(),H()*.48);
+      // Sophie sad
+      sophie(W()*.27, H()*.78, .92, 'sad', '#9898b0');
+      // Craig walking away — back-view, slightly smaller
+      ctx.save(); ctx.translate(W()*.76, H()*.72); ctx.scale(.76,.76);
+      ctx.fillStyle='#3a6aaa';
+      ctx.beginPath(); ctx.ellipse(0,18,22,26,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle=P.skinC;
+      ctx.beginPath(); ctx.ellipse(0,-8,20,22,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle=P.hairC;
+      ctx.beginPath(); ctx.arc(0,-20,20,Math.PI*.9,Math.PI*.1); ctx.fill();
+      ctx.restore();
+      // broken heart
+      ctx.fillStyle=P.heart;
+      ctx.save(); ctx.translate(W()*.52,H()*.4); ctx.rotate(.08);
+      heart(0,0,18);
+      ctx.fillStyle='#fff4f6'; // crack
+      ctx.beginPath(); ctx.moveTo(0,-22); ctx.lineTo(3,0); ctx.lineTo(-2,4); ctx.lineTo(1,22); ctx.lineWidth=3;
+      ctx.strokeStyle='#fff4f6'; ctx.stroke();
+      ctx.restore();
+    }
+  },
+
+  // 6 — Time apart
+  { cap: "They spent time apart. But some hearts don't know how to quit.",
+    draw() {
+      bg();
+      ctx.fillStyle='#000c18'; ctx.fillRect(0,0,W(),H()*.58);
+      // divider — neon green dashed
+      ctx.strokeStyle='rgba(0,255,136,.3)'; ctx.lineWidth=2; ctx.setLineDash([8,6]);
+      ctx.beginPath(); ctx.moveTo(W()/2,0); ctx.lineTo(W()/2,H()); ctx.stroke();
+      ctx.setLineDash([]);
+      // labels
+      ctx.fillStyle='#00b4d8'; ctx.font=`${H()*.024}px 'Courier New', monospace`; ctx.textAlign='center';
+      ctx.fillText('Seattle', W()*.25, H()*.08);
+      ctx.fillStyle='#00d4a0';
+      ctx.fillText('Portland', W()*.75, H()*.08);
+      ctx.textAlign='left';
+      seattle(W()*.24, H()*.58, .88, 'rgba(80,110,150,.55)');
+      portland(W()*.76, H()*.58, .88, 'rgba(80,120,80,.55)');
+      // ground
+      ctx.fillStyle=P.ground; ctx.fillRect(0,H()*.58,W(),H()*.42);
+      sophie(W()*.2, H()*.84, .72, 'sad');
+      craig( W()*.8, H()*.84, .72, 'sad');
+      // hearts floating across gap
+      [[W()*.4,H()*.38,12,.55],[W()*.6,H()*.38,12,.55],
+       [W()*.46,H()*.3,8,.38],[W()*.54,H()*.3,8,.38],
+       [W()*.5,H()*.22,9,.28]].forEach(([hx,hy,hr,ho])=>{
+        ctx.fillStyle=`rgba(255,0,110,${ho})`; heart(hx,hy,hr);
+      });
+    }
+  },
+
+  // 7 — Reconnection text
+  { cap: "And then… a message. Because real love has its own gravity.",
+    draw() {
+      bg();
+      // phone
+      const px=W()*.28, py=H()*.18, pw=W()*.44, ph=H()*.55, pr=16;
+      ctx.fillStyle='#050a08';
+      ctx.strokeStyle='rgba(0,255,136,.4)'; ctx.lineWidth=1;
+      ctx.beginPath();
+      ctx.moveTo(px+pr,py); ctx.lineTo(px+pw-pr,py);
+      ctx.arcTo(px+pw,py,px+pw,py+pr,pr); ctx.lineTo(px+pw,py+ph-pr);
+      ctx.arcTo(px+pw,py+ph,px+pw-pr,py+ph,pr); ctx.lineTo(px+pr,py+ph);
+      ctx.arcTo(px,py+ph,px,py+ph-pr,pr); ctx.lineTo(px,py+pr);
+      ctx.arcTo(px,py,px+pr,py,pr); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle='#050e0a'; // dark screen
+      ctx.fillRect(px+4, py+12, pw-8, ph-24);
+      // message bubbles
+      ctx.fillStyle='#004a3a';
+      ctx.beginPath(); ctx.roundRect(px+pw*.18, py+H()*.08, pw*.6, H()*.07, 8); ctx.fill();
+      ctx.fillStyle='#00ff88'; ctx.font=`${H()*.022}px 'Courier New', monospace`; ctx.textAlign='center';
+      ctx.fillText('Hey you… 👋', px+pw*.5, py+H()*.125);
+      ctx.fillStyle='#0d1a14';
+      ctx.beginPath(); ctx.roundRect(px+pw*.08, py+H()*.17, pw*.68, H()*.07, 8); ctx.fill();
+      ctx.fillStyle='#7aeab0'; ctx.fillText('Hey you back 😊', px+pw*.44, py+H()*.215);
+      ctx.fillStyle='#004a3a';
+      ctx.beginPath(); ctx.roundRect(px+pw*.2, py+H()*.26, pw*.58, H()*.07, 8); ctx.fill();
+      ctx.fillStyle='#00ff88'; ctx.fillText('I miss you ♡', px+pw*.5, py+H()*.305);
+      ctx.textAlign='left';
+      // Sophie holding phone, happy
+      sophie(W()*.22, H()*.95, .78, 'love');
+    }
+  },
+
+  // 8 — Reunion
+  { cap: "They found their way back to each other.",
+    draw() {
+      bg();
+      ctx.fillStyle='#000c18'; ctx.fillRect(0,0,W(),H()*.55);
+      // neon orb + rays
+      ctx.fillStyle='rgba(0,229,204,.85)';
+      ctx.beginPath(); ctx.arc(W()*.8, H()*.1, W()*.06, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle='rgba(0,229,204,.5)'; ctx.lineWidth=2;
+      for(let i=0;i<8;i++){const a=i*Math.PI/4; const d1=W()*.09, d2=W()*.13;
+        ctx.beginPath(); ctx.moveTo(W()*.8+Math.cos(a)*d1,H()*.1+Math.sin(a)*d1);
+        ctx.lineTo(W()*.8+Math.cos(a)*d2,H()*.1+Math.sin(a)*d2); ctx.stroke();}
+      ctx.fillStyle=P.ground; ctx.fillRect(0,H()*.55,W(),H()*.45);
+      // leaning toward each other
+      ctx.save(); ctx.translate(W()*.3, H()*.72); ctx.rotate(-.08);
+      sophie(0,0,.96,'love'); ctx.restore();
+      ctx.save(); ctx.translate(W()*.7, H()*.72); ctx.rotate(.08);
+      craig(0,0,.96,'love'); ctx.restore();
+      // hearts burst
+      [[W()*.5,H()*.34,22,.92],[W()*.4,H()*.27,12,.7],[W()*.6,H()*.27,12,.7],
+       [W()*.5,H()*.2,9,.5],[W()*.32,H()*.22,8,.5],[W()*.68,H()*.22,8,.5]].forEach(([hx,hy,hr,ho])=>{
+        ctx.fillStyle=`rgba(255,0,110,${ho})`; heart(hx,hy,hr);
+      });
+    }
+  },
+
+  // 9 — Adventures montage
+  { cap: "And they made up for every moment apart.",
+    draw() {
+      bg();
+      const hw = W()/2, hh = H()/2;
+      // ── panel 1: DJ set (TL) ──
+      ctx.fillStyle='#000408'; ctx.fillRect(0,0,hw,hh);
+      ctx.fillStyle='rgba(0,180,100,.15)'; ctx.fillRect(0,0,hw,hh);
+      note(hw*.28,hh*.18,hh*.09); note(hw*.68,hh*.12,hh*.07);
+      sophie(hw*.28,hh*.78,.5,'love','#003a2a');
+      craig( hw*.72,hh*.78,.5,'happy','#001e3a');
+      // ── panel 2: outdoors hiking (TR) ──
+      ctx.fillStyle='#000c18'; ctx.fillRect(hw,0,hw,hh*.58);
+      ctx.fillStyle=P.ground; ctx.fillRect(hw,hh*.58,hw,hh*.42);
+      sophie(hw+hw*.28,hh*.78,.5,'happy','#002a1a');
+      craig( hw+hw*.72,hh*.78,.5,'happy','#001a28');
+      ctx.fillStyle='rgba(0,229,204,.8)';
+      ctx.beginPath(); ctx.arc(hw+hw*.75,hh*.1,hw*.05,0,Math.PI*2); ctx.fill();
+      // ── panel 3: polaroid (BL) ──
+      ctx.fillStyle='#050a08'; ctx.fillRect(0,hh,hw,hh);
+      ctx.fillStyle='#0a1a14'; ctx.fillRect(hw*.12,hh+hh*.08,hw*.76,hh*.66);
+      ctx.strokeStyle='rgba(0,255,136,.2)'; ctx.lineWidth=1; ctx.strokeRect(hw*.12,hh+hh*.08,hw*.76,hh*.66);
+      sophie(hw*.35,hh+hh*.56,.43,'love');
+      craig( hw*.67,hh+hh*.56,.43,'happy');
+      ctx.fillStyle='#00ff88'; ctx.font=`italic ${H()*.022}px 'Courier New', monospace`; ctx.textAlign='center';
+      ctx.fillText('us ♡', hw*.5, hh+hh*.88);
+      ctx.textAlign='left';
+      // ── panel 4: festive/NYE (BR) ──
+      ctx.fillStyle='#000408'; ctx.fillRect(hw,hh,hw,hh);
+      ctx.fillStyle=P.gold;
+      starsPos.slice(0,10).forEach(([sx,sy])=>{ ctx.beginPath(); ctx.arc(hw+sx*hw,hh+sy*hh,2,0,Math.PI*2); ctx.fill(); });
+      sophie(hw+hw*.28,hh+hh*.78,.5,'happy','#002a20');
+      craig( hw+hw*.72,hh+hh*.78,.5,'happy','#001e28');
+      // ── grid lines ──
+      ctx.strokeStyle='rgba(0,255,136,.3)'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(W()/2,0); ctx.lineTo(W()/2,H()); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,H()/2); ctx.lineTo(W(),H()/2); ctx.stroke();
+    }
+  },
+
+  // 10 — Big decision / moving in
+  { cap: "A big decision: try building a life together. Portland-bound.",
+    draw() {
+      bg();
+      ctx.fillStyle='#000c18'; ctx.fillRect(0,0,W(),H()*.68);
+      ctx.fillStyle='#050a08'; ctx.fillRect(0,H()*.68,W(),H()*.32);
+      // window — dark with teal glow
+      ctx.fillStyle='#001a2e';
+      ctx.fillRect(W()*.08,H()*.08,W()*.3,H()*.24);
+      ctx.strokeStyle='rgba(0,180,255,.4)'; ctx.lineWidth=2;
+      ctx.strokeRect(W()*.08,H()*.08,W()*.3,H()*.24);
+      ctx.beginPath(); ctx.moveTo(W()*.23,H()*.08); ctx.lineTo(W()*.23,H()*.32); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(W()*.08,H()*.2);  ctx.lineTo(W()*.38,H()*.2);  ctx.stroke();
+      // moving box — dark teal
+      ctx.fillStyle='#002a20';
+      ctx.fillRect(W()*.56,H()*.52,W()*.26,H()*.2);
+      ctx.fillRect(W()*.56,H()*.52,W()*.26,H()*.045);
+      ctx.strokeStyle='rgba(0,255,136,.3)'; ctx.lineWidth=1; ctx.strokeRect(W()*.56,H()*.52,W()*.26,H()*.2);
+      ctx.fillStyle='#00ff88'; ctx.font=`bold ${H()*.02}px 'Courier New', monospace`; ctx.textAlign='center';
+      ctx.fillText('Portland', W()*.69, H()*.615);
+      ctx.fillStyle=P.heart; ctx.font=`${H()*.024}px serif`;
+      ctx.fillText('♡', W()*.69, H()*.645);
+      ctx.textAlign='left';
+      sophie(W()*.3, H()*.82, .88,'happy');
+      craig( W()*.65,H()*.8, .88,'happy');
+      ctx.fillStyle='rgba(232,56,128,.62)'; heart(W()*.5,H()*.44,H()*.032);
+    }
+  },
+
+  // 11 — The distance
+  { cap: "Sophie in Seattle. Craig in Portland. 174 miles of longing.",
+    draw() {
+      ctx.fillStyle='#0c1224'; ctx.fillRect(0,0,W(),H());
+      // stars
+      ctx.fillStyle='rgba(255,255,255,.72)';
+      starsPos.forEach(([sx,sy])=>{ ctx.beginPath(); ctx.arc(sx*W(),sy*H(),1.2,0,Math.PI*2); ctx.fill(); });
+      // moon
+      ctx.fillStyle='#fff8e0';
+      ctx.beginPath(); ctx.arc(W()/2,H()*.22,W()*.075,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#f0e8c0';
+      ctx.beginPath(); ctx.arc(W()*.54,H()*.2,W()*.052,0,Math.PI*2); ctx.fill(); // shadow crescent
+      // city silhouettes
+      seattle(W()*.22,  H()*.7, .82, 'rgba(255,255,255,.22)');
+      portland(W()*.78, H()*.7, .82, 'rgba(255,255,255,.22)');
+      ctx.fillStyle='#182438'; ctx.fillRect(0,H()*.7,W(),H()*.3);
+      // characters
+      sophie(W()*.2, H()*.86, .7, 'sad');
+      craig( W()*.8, H()*.86, .7, 'sad');
+      // heart bridge
+      [.36,.43,.5,.57,.64].forEach((fx,i)=>{
+        ctx.fillStyle=`rgba(255,0,110,${.18+i*.1})`; heart(W()*fx, H()*.6-i*3, 7+i*2);
+      });
+      ctx.fillStyle='rgba(255,255,255,.55)'; ctx.font=`italic ${H()*.026}px Georgia`; ctx.textAlign='center';
+      ctx.fillText('174 miles', W()/2, H()*.13);
+      ctx.textAlign='left';
+    }
+  },
+
+  // 12 — The rough patch
+  { cap: "New jobs. New city. Figuring out logistics while trying not to lose each other.",
+    draw() {
+      bg();
+      ctx.fillStyle='#000c18'; ctx.fillRect(0,0,W(),H()*.5);
+      ctx.fillStyle='#050a08'; ctx.fillRect(0,H()*.5,W(),H()*.5);
+      // office window — Portland buildings
+      ctx.fillStyle='#001a2e'; ctx.fillRect(W()*.52,H()*.04,W()*.4,H()*.36);
+      ctx.strokeStyle='rgba(0,180,255,.4)'; ctx.lineWidth=2; ctx.strokeRect(W()*.52,H()*.04,W()*.4,H()*.36);
+      ctx.fillStyle='rgba(0,180,255,.55)';
+      ctx.fillRect(W()*.64,H()*.12,W()*.06,H()*.24);   // main tall block
+      ctx.fillRect(W()*.71,H()*.18,W()*.05,H()*.18);   // mid block
+      ctx.fillRect(W()*.77,H()*.14,W()*.045,H()*.22);  // right taller block
+      ctx.fillRect(W()*.57,H()*.22,W()*.06,H()*.14);   // left shorter block
+      // lit windows — neon green dots
+      ctx.fillStyle='rgba(0,255,136,.4)';
+      [[W()*.647,H()*.15],[W()*.663,H()*.15],[W()*.647,H()*.2],[W()*.663,H()*.2],
+       [W()*.647,H()*.25],[W()*.663,H()*.25]].forEach(([wx,wy])=>{
+        ctx.fillRect(wx,wy,W()*.008,H()*.024);
+      });
+      // "OFFICE" label on window frame
+      ctx.fillStyle='rgba(0,180,255,.7)'; ctx.font=`bold ${H()*.016}px 'Courier New', monospace`;
+      ctx.textAlign='center'; ctx.fillText('OFFICE', W()*.72, H()*.42); ctx.textAlign='left';
+      // desk
+      ctx.fillStyle='#0a1a10'; ctx.fillRect(W()*.04,H()*.5,W()*.48,H()*.06);
+      // logistics to-do note
+      ctx.fillStyle='#0a1a14'; ctx.fillRect(W()*.28,H()*.38,W()*.22,H()*.13);
+      ctx.strokeStyle='rgba(0,255,136,.2)'; ctx.lineWidth=1; ctx.strokeRect(W()*.28,H()*.38,W()*.22,H()*.13);
+      ctx.fillStyle='rgba(0,255,136,.55)'; ctx.font=`${H()*.013}px 'Courier New', monospace`;
+      ctx.fillText('→ new job ✓', W()*.295, H()*.42);
+      ctx.fillText('→ find apt ??', W()*.295, H()*.445);
+      ctx.fillText('→ see Craig ??', W()*.295, H()*.47);
+      // laptop — glowing screen
+      ctx.fillStyle='#001e14'; ctx.fillRect(W()*.08,H()*.28,W()*.3,H()*.22);
+      ctx.fillStyle='rgba(0,255,136,.15)'; ctx.fillRect(W()*.1,H()*.3,W()*.26,H()*.18);
+      // Sophie at desk
+      sophie(W()*.26, H()*.76, .82, 'neutral');
+      // thought bubble to Craig — dark
+      ctx.fillStyle='rgba(5,15,10,.9)'; ctx.strokeStyle='rgba(0,255,136,.2)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.arc(W()*.72,H()*.17,W()*.17,0,Math.PI*2); ctx.fill(); ctx.stroke();
+      [W()*.44,W()*.5,W()*.56].forEach((bx,i)=>{
+        ctx.beginPath(); ctx.arc(bx, H()*.34-i*.03*H(), (3-i)*3, 0, Math.PI*2); ctx.fill();
+      });
+      craig(W()*.72, H()*.21, .44, 'happy');
+    }
+  },
+
+  // 13 — Truth
+  { cap: "But here's the thing about real love...",
+    draw() {
+      const g = ctx.createLinearGradient(0,0,0,H());
+      g.addColorStop(0,'#000408'); g.addColorStop(1,'#070c0a');
+      ctx.fillStyle=g; ctx.fillRect(0,0,W(),H()); lines();
+      // concentric hearts
+      ctx.fillStyle='rgba(255,0,110,.08)';  heart(W()/2,H()*.44,H()*.28);
+      ctx.fillStyle='rgba(255,0,110,.18)'; heart(W()/2,H()*.44,H()*.2);
+      ctx.fillStyle='rgba(255,0,110,.38)'; heart(W()/2,H()*.44,H()*.12);
+      ctx.fillStyle=P.heart;               heart(W()/2,H()*.44,H()*.065);
+      // characters inside
+      sophie(W()*.36,H()*.56,.72,'love');
+      craig( W()*.64,H()*.56,.72,'love');
+      // text
+      ctx.fillStyle='#00ff88'; ctx.font=`bold italic ${H()*.058}px 'Courier New', monospace`; ctx.textAlign='center';
+      ctx.fillText('Love.', W()/2, H()*.18);
+      ctx.textAlign='left';
+    }
+  },
+
+  // 14 — All paths lead here
+  { cap: "Every version of your path — every plan, every worry — has you two in it.",
+    draw() {
+      bg();
+      const mx=W()/2, sy=H()*.12, ey=H()*.8;
+      // three paths
+      ctx.strokeStyle='rgba(0,255,136,.4)'; ctx.lineWidth=2.5; ctx.setLineDash([7,5]);
+      ctx.beginPath(); ctx.moveTo(mx,sy); ctx.bezierCurveTo(W()*.18,H()*.35,W()*.08,H()*.58,mx,ey); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(mx,sy); ctx.bezierCurveTo(W()*.82,H()*.35,W()*.92,H()*.58,mx,ey); ctx.stroke();
+      ctx.strokeStyle=P.heart; ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.moveTo(mx,sy); ctx.lineTo(mx,ey); ctx.stroke();
+      ctx.setLineDash([]);
+      // path labels
+      ctx.fillStyle='rgba(0,255,136,.6)'; ctx.font=`italic ${H()*.022}px 'Courier New', monospace`; ctx.textAlign='center';
+      ctx.fillText('this plan', W()*.16,H()*.46);
+      ctx.fillText('that plan', W()*.84,H()*.46);
+      ctx.fillStyle=P.heart; ctx.fillText('us', mx,H()*.42);
+      // start (tiny couple)
+      sophie(mx-W()*.08,sy+H()*.04,.38,'happy');
+      craig( mx+W()*.08,sy+H()*.04,.38,'happy');
+      // destination heart
+      ctx.fillStyle=P.heart; heart(mx,ey+H()*.05,H()*.058);
+      // couple at destination
+      sophie(mx-W()*.1,ey+H()*.12,.48,'love');
+      craig( mx+W()*.1,ey+H()*.12,.48,'love');
+      ctx.textAlign='left';
+    }
+  },
+
+  // 15 — Everything is going to be okay
+  { cap: "It's all going to be okay. Because you love each other.",
+    draw() {
+      const g=ctx.createLinearGradient(0,0,0,H());
+      g.addColorStop(0,'#000c18'); g.addColorStop(.5,'#000814'); g.addColorStop(1,'#000408');
+      ctx.fillStyle=g; ctx.fillRect(0,0,W(),H()*.62); lines();
+      ctx.fillStyle=P.ground;   ctx.fillRect(0,H()*.62,W(),H()*.38);
+      ctx.fillStyle=P.groundDk; ctx.fillRect(0,H()*.76,W(),H()*.24);
+      // hills
+      ctx.fillStyle=P.ground;
+      ctx.beginPath(); ctx.arc(W()*.18,H()*.66,W()*.38,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(W()*.82,H()*.68,W()*.4,0,Math.PI*2);  ctx.fill();
+      // neon orb
+      ctx.fillStyle='rgba(0,229,204,.85)';
+      ctx.beginPath(); ctx.arc(W()/2,H()*.11,W()*.07,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='rgba(0,229,204,.4)'; ctx.lineWidth=2;
+      for(let i=0;i<10;i++){const a=i*Math.PI*.2;
+        ctx.beginPath(); ctx.moveTo(W()/2+Math.cos(a)*W()*.09,H()*.11+Math.sin(a)*W()*.09);
+        ctx.lineTo(W()/2+Math.cos(a)*W()*.13,H()*.11+Math.sin(a)*W()*.13); ctx.stroke();}
+      // couple hand-in-hand
+      sophie(W()*.34,H()*.76,.95,'love');
+      craig( W()*.66,H()*.76,.95,'love');
+      ctx.fillStyle=P.heart; heart(W()/2,H()*.77,H()*.034);
+      // confetti — neon palette
+      const neonConfetti = confetti.map(([cx,cy,ang,_],i)=>[cx,cy,ang,['#ff006e','#00ff88','#00e5cc','#005a6a','#00b4d8'][i%5]]);
+      neonConfetti.forEach(([cx,cy,ang,col])=>{
+        ctx.save(); ctx.translate(W()*cx, H()*cy*.65); ctx.rotate(ang*Math.PI/180);
+        ctx.fillStyle=col; ctx.fillRect(-4,-2,8,4); ctx.restore();
+      });
+    }
+  },
+
+  // 16 — Stars / superpower
+  { cap: "Because you chose each other. Again and again. That's your superpower. ♡",
+    draw() {
+      bg();
+      ctx.fillStyle=P.gold; ctx.font=`${H()*.038}px serif`; ctx.textAlign='center';
+      [.1,.3,.5,.7,.9,.2,.4,.6,.8].forEach((fx,i)=>{
+        ctx.fillText('✦', W()*fx, H()*(.06+i*.09));
+      });
+      ctx.textAlign='left';
+      sophie(W()*.3,H()*.7,1.1,'love');
+      craig( W()*.7,H()*.7,1.1,'love');
+      ctx.fillStyle=P.heart; heart(W()/2,H()*.27,H()*.1);
+      ctx.fillStyle=P.heartPale;
+      [[W()*.1,H()*.14,9],[W()*.9,H()*.14,9],[W()*.1,H()*.87,7],[W()*.9,H()*.87,7],[W()/2,H()*.08,11]].forEach(([hx,hy,hr])=>heart(hx,hy,hr));
+      ctx.fillStyle='#00d4a0'; ctx.font=`italic ${H()*.036}px 'Courier New', monospace`; ctx.textAlign='center';
+      ctx.fillText('"...because you chose', W()/2, H()*.85);
+      ctx.fillText('each other." ♡', W()/2, H()*.91);
+      ctx.textAlign='left';
+    }
+  },
+
+  // 17 — The Embrace (new final slide)
+  { cap: "I'm learning what love means. But I will always choose you.",
+    draw() {
+      // Dark gradient background
+      const g=ctx.createLinearGradient(0,0,0,H());
+      g.addColorStop(0,'#000408'); g.addColorStop(1,'#070c0a');
+      ctx.fillStyle=g; ctx.fillRect(0,0,W(),H()); lines();
+      // Heart glow behind them
+      ctx.fillStyle='rgba(255,0,110,.06)'; heart(W()/2, H()*.58, H()*.44);
+      ctx.fillStyle='rgba(255,0,110,.1)'; heart(W()/2, H()*.58, H()*.3);
+      // Floating hearts
+      [[W()*.12,H()*.18,8,.3],[W()*.88,H()*.15,7,.25],[W()*.22,H()*.82,6,.2],[W()*.82,H()*.8,8,.28]].forEach(([hx,hy,hr,ho])=>{
+        ctx.fillStyle=`rgba(255,0,110,${ho})`; heart(hx,hy,hr);
+      });
+
+      // ── Draw the embrace ──
+      // Craig stands facing forward, positioned slightly right
+      craig(W()*.58, H()*.72, 1.02, 'happy');
+
+      // Sophie nestled against Craig from his left side —
+      // draw her smaller so she fits neatly against him
+      sophie(W()*.34, H()*.74, .82, 'love');
+
+      // Craig's left arm arcing over Sophie's shoulders (drawn on top)
+      ctx.save();
+      ctx.strokeStyle=P.skinC; ctx.lineWidth=14; ctx.lineCap='round';
+      ctx.beginPath();
+      // starts from Craig's left shoulder area, sweeps around behind Sophie
+      ctx.moveTo(W()*.48, H()*.53);
+      ctx.bezierCurveTo(W()*.38, H()*.49, W()*.2, H()*.5, W()*.17, H()*.57);
+      ctx.stroke();
+      // His hand resting on Sophie's far shoulder
+      ctx.fillStyle=P.skinC;
+      ctx.beginPath(); ctx.ellipse(W()*.18, H()*.565, W()*.028, W()*.02, 0.5, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+
+      // Sophie's right arm reaching around Craig's waist
+      ctx.save();
+      ctx.strokeStyle=P.skin; ctx.lineWidth=11; ctx.lineCap='round';
+      ctx.beginPath();
+      ctx.moveTo(W()*.44, H()*.64);
+      ctx.bezierCurveTo(W()*.52, H()*.62, W()*.6, H()*.62, W()*.65, H()*.65);
+      ctx.stroke();
+      ctx.restore();
+
+      // Quote text
+      ctx.fillStyle='rgba(0,212,160,.85)';
+      ctx.font=`italic ${H()*.034}px 'Courier New', monospace`; ctx.textAlign='center';
+      ctx.fillText('"I\'m learning what', W()/2, H()*.1);
+      ctx.fillText('love means.', W()/2, H()*.155);
+      ctx.font=`bold italic ${H()*.036}px 'Courier New', monospace`;
+      ctx.fillStyle=P.heart;
+      ctx.fillText('But I will always', W()/2, H()*.88);
+      ctx.fillText('choose you." ♡', W()/2, H()*.94);
+      ctx.textAlign='left';
+    }
+  }
+];
+
+// ── ENGINE ────────────────────────────────
+let cur = 0, playing = false, playTimer = null;
+
+function draw() {
+  if (!W() || !H()) return;
+  ctx.clearRect(0,0,W(),H());
+  scenes[cur].draw();
+}
+
+function goto(n, dir) {
+  n = Math.max(0, Math.min(scenes.length-1, n));
+  if (n === cur) return;
+  cur = n;
+  // page-flip feel
+  const wrap = document.getElementById('canvas-wrap');
+  const rot = dir === 'back' ? 12 : -12;
+  wrap.style.transition = 'transform .16s ease-in';
+  wrap.style.transform  = `perspective(700px) rotateY(${rot}deg)`;
+  setTimeout(()=>{
+    draw();
+    wrap.style.transition = 'transform .16s ease-out';
+    wrap.style.transform  = 'perspective(700px) rotateY(0deg)';
+  }, 160);
+  updateUI();
+}
+
+function updateUI() {
+  document.getElementById('cap-text').textContent = scenes[cur].cap;
+  document.getElementById('cap-num').textContent  = `${cur+1} / ${scenes.length}`;
+  document.querySelectorAll('.dot').forEach((d,i)=>d.classList.toggle('on', i===cur));
+  if (cur > 0) document.getElementById('tap-hint').classList.add('gone');
+}
+
+function togglePlay() {
+  playing = !playing;
+  document.getElementById('playbtn').textContent = playing ? '⏸' : '▶';
+  if (playing) {
+    playTimer = setInterval(()=>{
+      if (cur < scenes.length-1) { goto(cur+1,'fwd'); }
+      else { togglePlay(); }
+    }, 2600);
+  } else {
+    clearInterval(playTimer);
+  }
+}
+
+// ── DOTS ─────────────────────────────────
+const dotsEl = document.getElementById('dots');
+scenes.forEach((_,i)=>{
+  const d = document.createElement('div');
+  d.className = 'dot' + (i===0?' on':'');
+  dotsEl.appendChild(d);
+});
+
+// ── EVENTS ───────────────────────────────
+document.getElementById('canvas-wrap').addEventListener('click', ()=>goto(cur+1,'fwd'));
+document.getElementById('next').addEventListener('click',        ()=>goto(cur+1,'fwd'));
+document.getElementById('prev').addEventListener('click',        ()=>goto(cur-1,'back'));
+document.getElementById('playbtn').addEventListener('click',     togglePlay);
+
+// swipe support
+let tx0=0;
+document.getElementById('canvas-wrap').addEventListener('touchstart', e=>{ tx0=e.touches[0].clientX; }, {passive:true});
+document.getElementById('canvas-wrap').addEventListener('touchend',   e=>{
+  const dx = e.changedTouches[0].clientX - tx0;
+  if (Math.abs(dx) > 40) { dx < 0 ? goto(cur+1,'fwd') : goto(cur-1,'back'); }
+}, {passive:true});
+
+// ── INIT ─────────────────────────────────
+updateUI();
+resize();
+</script>
+</body>
+</html>
